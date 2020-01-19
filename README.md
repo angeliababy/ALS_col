@@ -115,7 +115,7 @@ for i in topKRecs:
 7天当作训练数据，1天当作测试
 ```
 # 处理数据，用户序号，资讯，得分
-user_data_join = get_data(datas)
+user_data_join, user_label = get_data(datas, user_label)
 ```
 5.预测数据
 ```
@@ -152,9 +152,9 @@ print ("均方根误差 = %f"% regressionMetrics.rootMeanSquaredError)
 
 2）测试数据的准确性（7天当作训练数据，另1天当作测试）：
 
-均方误差 = 2.207138
+均方误差 = 1.663446
 
-均方根误差 = 1.485644
+均方根误差 = 1.289746
 
 
 

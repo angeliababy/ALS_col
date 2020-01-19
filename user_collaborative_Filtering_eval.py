@@ -17,7 +17,7 @@ def combinepartition(a, b):
 
 
 # 处理数据，用户序号，资讯，得分
-def get_data(datas):
+def get_data(datas, user_label = False):
     # data.createOrReplaceTempView('data')
     # datas = spark.sql('select * from data order by update_time desc limit 5000')
     # user_news_score,用户资讯得分表（user_id、资讯、得分、member_id）(user_id和member_id有一个为0)
@@ -27,19 +27,20 @@ def get_data(datas):
     # x[0]="user_id member_id item" x[1]=ave(rating)
     data_user_collect_merge = data_user_collect.map(lambda x: (x[0], np.mean(x[1]) if len(x[1]) > 1 else x[1][0]))
     # 用户标签（"user_id member_id"，用户序号）,将用户标签序列化，便于预测
-    user_label = data_user.rdd.map(lambda x: str(x[0]) + " " + str(x[3])).distinct().zipWithIndex()
-    print(user_label.count())
+    if user_label == False:  # 训练时候
+        user_label = data_user.rdd.map(lambda x: str(x[0]) + " " + str(x[3])).distinct().zipWithIndex()
+        print(user_label.take(10))
     # [('0 427722', 0), ('16310446 0', 1), ('0 500374', 2), ('0 726450', 3), ('0 902359', 4), ('0 900474', 5), ('0 905028', 6), ('0 904945', 7), ('16314037 0', 8), ('0 875058', 9)]
     user_data_join = data_user_collect_merge.map(lambda x: (x[0].split(" ")[0] + " " + x[0].split(" ")[1], (x[0].split(" ")[-1], x[1]))).join(user_label).map(lambda x: (x[1][1], int(x[1][0][0]), x[1][0][1]))
     print(user_data_join.take(10))
-    return user_data_join
+    return user_data_join, user_label
 
 if __name__ == "__main__":
 
     # 连接数据库
-    RECOMMEND_JDBC = '***'
-    JDBC_USER = '***'
-    JDBC_PASSWORD = '***'
+    RECOMMEND_JDBC = 'jdbc:mysql://192.168.1.158:3306/chenz'
+    JDBC_USER = 'root'
+    JDBC_PASSWORD = '123456'
 
     spark = SparkSession.builder.appName('user_coll').config('spark.default.parallelism','10').getOrCreate()
     # file_name = os.listdir(os.getcwd())
@@ -52,7 +53,7 @@ if __name__ == "__main__":
     datas = data.filter(data.add_time > max_time)
     if datas.count() > 2:
         # 处理数据，用户序号，资讯，得分
-        user_data_join = get_data(datas)
+        user_data_join, user_label = get_data(datas)
 
         # ALS评估
         from pyspark.mllib.recommendation import Rating, ALS
@@ -110,12 +111,12 @@ if __name__ == "__main__":
         datas = data.filter(data.add_time < max_time).filter(data.add_time > min_time)
 
         # 处理数据，用户序号，资讯，得分
-        user_data_join = get_data(datas)
+        user_data_join, user_label = get_data(datas, user_label)
 
         # ALS评估
         from pyspark.mllib.recommendation import Rating, ALS
 
-        # 1.测试数据（用户序号,item,rating）
+        # 测试数据（用户序号,item,rating）
         ratings = user_data_join.map(lambda x: Rating(int(x[0]), int(x[1]), float(x[2])))
 
         userProducts = ratings.map(lambda rating:(rating.user,rating.product))
@@ -132,9 +133,9 @@ if __name__ == "__main__":
         from pyspark.mllib.evaluation import RankingMetrics
         #((196, 242), (3.0, 3.089619902353484))
         predictedAndTrue = ratingsAndPredictions.map(lambda x:x[1][0:2])
-        print (predictedAndTrue.take(5))
+        print(predictedAndTrue.take(5))
         regressionMetrics = RegressionMetrics(predictedAndTrue)
-        print ("均方误差 = %f"%regressionMetrics.meanSquaredError)
-        print ("均方根误差 = %f"% regressionMetrics.rootMeanSquaredError)
+        print("均方误差 = %f"%regressionMetrics.meanSquaredError)
+        print("均方根误差 = %f"% regressionMetrics.rootMeanSquaredError)
         # 均方误差 = 0.000245
         # 均方根误差 = 0.015641
